@@ -124,7 +124,7 @@ export class GifExporter {
 			const repeat = this.config.loop ? 0 : 1;
 
 			this.gif = new GIF({
-				workers: 4,
+				workers: Math.min(navigator.hardwareConcurrency || 4, 16),
 				quality: 10,
 				width: this.config.width,
 				height: this.config.height,

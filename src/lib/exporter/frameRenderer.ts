@@ -42,6 +42,11 @@ interface AnimationState {
 	focusY: number;
 }
 
+interface VideoFrameBuffer {
+	canvas: OffscreenCanvas;
+	ctx: OffscreenCanvasRenderingContext2D;
+}
+
 // Renders video frames with all effects (background, zoom, crop, blur, shadow) to an offscreen canvas for export.
 
 export class FrameRenderer {
@@ -60,6 +65,9 @@ export class FrameRenderer {
 	private animationState: AnimationState;
 	private layoutCache: any = null;
 	private currentVideoTime = 0;
+	private videoFrameBuffer: VideoFrameBuffer | null = null;
+	private layoutInitialized = false;
+	private cachedShadowFilter: string | null = null;
 
 	constructor(config: FrameRenderConfig) {
 		this.config = config;
@@ -140,6 +148,25 @@ export class FrameRenderer {
 		this.maskGraphics = new Graphics();
 		this.videoContainer.addChild(this.maskGraphics);
 		this.videoContainer.mask = this.maskGraphics;
+
+		// Stable OffscreenCanvas for VideoFrame uploads — avoids create/destroy of GPU texture each frame
+		const vfc = new OffscreenCanvas(this.config.videoWidth, this.config.videoHeight);
+		const vfCtx = vfc.getContext("2d");
+		if (!vfCtx) throw new Error("Failed to get 2D context for video frame buffer");
+		this.videoFrameBuffer = { canvas: vfc, ctx: vfCtx };
+
+		// Pre-compute shadow filter string — config is immutable so compute once
+		if (this.config.showShadow && this.config.shadowIntensity > 0) {
+			const intensity = this.config.shadowIntensity;
+			const baseBlur1 = 48 * intensity;
+			const baseBlur2 = 16 * intensity;
+			const baseBlur3 = 8 * intensity;
+			const baseAlpha1 = 0.7 * intensity;
+			const baseAlpha2 = 0.5 * intensity;
+			const baseAlpha3 = 0.3 * intensity;
+			const baseOffset = 12 * intensity;
+			this.cachedShadowFilter = `drop-shadow(0 ${baseOffset}px ${baseBlur1}px rgba(0,0,0,${baseAlpha1})) drop-shadow(0 ${baseOffset / 3}px ${baseBlur2}px rgba(0,0,0,${baseAlpha2})) drop-shadow(0 ${baseOffset / 6}px ${baseBlur3}px rgba(0,0,0,${baseAlpha3}))`;
+		}
 	}
 
 	private async setupBackground(): Promise<void> {
@@ -273,21 +300,24 @@ export class FrameRenderer {
 
 		this.currentVideoTime = timestamp / 1000000;
 
-		// Create or update video sprite from VideoFrame
+		// Upload VideoFrame into the stable OffscreenCanvas then mark the texture dirty.
+		// This reuses the same GPU texture object every frame instead of destroy+recreate.
+		const buf = this.videoFrameBuffer!;
+		buf.ctx.drawImage(videoFrame as any, 0, 0);
+
 		if (!this.videoSprite) {
-			const texture = Texture.from(videoFrame as any);
+			const texture = Texture.from(buf.canvas as any);
 			this.videoSprite = new Sprite(texture);
 			this.videoContainer.addChild(this.videoSprite);
 		} else {
-			// Destroy old texture to avoid memory leaks, then create new one
-			const oldTexture = this.videoSprite.texture;
-			const newTexture = Texture.from(videoFrame as any);
-			this.videoSprite.texture = newTexture;
-			oldTexture.destroy(true);
+			this.videoSprite.texture.source.update();
 		}
 
-		// Apply layout
-		this.updateLayout();
+		// Layout only depends on config which never changes — compute once
+		if (!this.layoutInitialized) {
+			this.updateLayout();
+			this.layoutInitialized = true;
+		}
 
 		const timeMs = this.currentVideoTime * 1000;
 		const TICKS_PER_FRAME = 1;
@@ -508,27 +538,11 @@ export class FrameRenderer {
 		}
 
 		// Draw video layer with shadows on top of background
-		if (
-			this.config.showShadow &&
-			this.config.shadowIntensity > 0 &&
-			this.shadowCanvas &&
-			this.shadowCtx
-		) {
+		if (this.cachedShadowFilter && this.shadowCanvas && this.shadowCtx) {
 			const shadowCtx = this.shadowCtx;
 			shadowCtx.clearRect(0, 0, w, h);
 			shadowCtx.save();
-
-			// Calculate shadow parameters based on intensity (0-1)
-			const intensity = this.config.shadowIntensity;
-			const baseBlur1 = 48 * intensity;
-			const baseBlur2 = 16 * intensity;
-			const baseBlur3 = 8 * intensity;
-			const baseAlpha1 = 0.7 * intensity;
-			const baseAlpha2 = 0.5 * intensity;
-			const baseAlpha3 = 0.3 * intensity;
-			const baseOffset = 12 * intensity;
-
-			shadowCtx.filter = `drop-shadow(0 ${baseOffset}px ${baseBlur1}px rgba(0,0,0,${baseAlpha1})) drop-shadow(0 ${baseOffset / 3}px ${baseBlur2}px rgba(0,0,0,${baseAlpha2})) drop-shadow(0 ${baseOffset / 6}px ${baseBlur3}px rgba(0,0,0,${baseAlpha3}))`;
+			shadowCtx.filter = this.cachedShadowFilter;
 			shadowCtx.drawImage(videoCanvas, 0, 0, w, h);
 			shadowCtx.restore();
 			ctx.drawImage(this.shadowCanvas, 0, 0, w, h);
@@ -549,6 +563,9 @@ export class FrameRenderer {
 			this.videoSprite.destroy();
 			this.videoSprite = null;
 		}
+		this.videoFrameBuffer = null;
+		this.layoutInitialized = false;
+		this.cachedShadowFilter = null;
 		this.backgroundSprite = null;
 		if (this.app) {
 			this.app.destroy(true, { children: true, texture: true, textureSource: true });
