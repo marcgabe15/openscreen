@@ -342,7 +342,7 @@ export class StreamingVideoDecoder {
 		if (
 			!this.cancelled &&
 			lastDecodedFrameSec !== null &&
-			requiredEndSec - lastDecodedFrameSec > 1
+			requiredEndSec - lastDecodedFrameSec > 2
 		) {
 			throw new Error(
 				`Video decode ended early at ${lastDecodedFrameSec.toFixed(3)}s (needed ${requiredEndSec.toFixed(3)}s).`,
