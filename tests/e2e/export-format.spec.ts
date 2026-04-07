@@ -94,8 +94,9 @@ async function runExport(formatButtonTestId: string, successText: string, ext: s
 		await editorWindow.getByTestId("testId-export-button").click();
 
 		// ── 5. Wait for the success toast.
+		// MP4 encoding via WebCodecs/OpenH264 can be slow under GPU stall conditions.
 		await expect(editorWindow.getByText(successText)).toBeVisible({
-			timeout: 90_000,
+			timeout: 180_000,
 		});
 
 		// ── 6. Retrieve the captured buffer from the main-process global.
@@ -109,7 +110,7 @@ async function runExport(formatButtonTestId: string, successText: string, ext: s
 		await Promise.race([
 			app.close(),
 			new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
-		]).finally(() => app.process().kill());
+		]).finally(() => app.process()?.kill("SIGKILL"));
 		if (testVideoInRecordings && fs.existsSync(testVideoInRecordings)) {
 			fs.unlinkSync(testVideoInRecordings);
 		}

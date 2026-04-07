@@ -132,7 +132,7 @@ test("exports a GIF from a loaded video", async () => {
 		await Promise.race([
 			app.close(),
 			new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
-		]).finally(() => app.process().kill());
+		]).finally(() => app.process()?.kill("SIGKILL"));
 		if (fs.existsSync(outputPath)) {
 			fs.unlinkSync(outputPath);
 		}
