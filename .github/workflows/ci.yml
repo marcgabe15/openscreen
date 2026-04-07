@@ -56,6 +56,7 @@ jobs:
       # Install Electron system dependencies not covered by Playwright's chromium deps
       - run: npx electron . --version || sudo apt-get install -y libgbm-dev
       - run: npm run build-vite
+      - uses: FedericoCarboni/setup-ffmpeg@v3
       # Generate binary test fixtures via ffmpeg (keeps binaries out of git)
       - name: Generate test fixtures
         run: |
