@@ -57,6 +57,13 @@ jobs:
       # Install Electron system dependencies not covered by Playwright's chromium deps
       - run: npx electron . --version || sudo apt-get install -y libgbm-dev
       - run: npm run build-vite
+      # Generate binary test fixtures via ffmpeg (keeps binaries out of git)
+      - name: Generate test fixtures
+        run: |
+          mkdir -p tests/fixtures
+          ffmpeg -f lavfi -i color=c=blue:size=320x240:rate=10 \
+                 -t 2 -c:v libvpx-vp9 -b:v 0 -crf 37 \
+                 tests/fixtures/sample.webm
       # xvfb provides a virtual display; Electron needs one on Linux even with show:false
       - run: xvfb-run --auto-servernum npm run test:e2e
       - uses: actions/upload-artifact@v4
