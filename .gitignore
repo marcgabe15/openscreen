@@ -30,3 +30,6 @@ release/**
 # Playwright
 test-results
 playwright-report/
+
+# Generated test fixtures (created by ffmpeg in CI and locally)
+tests/fixtures/
