@@ -13,7 +13,7 @@ async function runExport(formatButtonTestId: string, successText: string, ext: s
 	const outputPath = path.join(os.tmpdir(), `test-export-${Date.now()}.${ext}`);
 
 	const app = await electron.launch({
-		args: [MAIN_JS, "--no-sandbox"],
+		args: [MAIN_JS, "--no-sandbox", "--disable-gpu", "--enable-unsafe-swiftshader"],
 		env: {
 			...process.env,
 			HEADLESS: process.env["HEADLESS"] ?? "true",
@@ -94,7 +94,10 @@ async function runExport(formatButtonTestId: string, successText: string, ext: s
 
 		return outputPath;
 	} finally {
-		await app.close();
+		await Promise.race([
+			app.close(),
+			new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+		]).finally(() => app.process().kill());
 	}
 }
 

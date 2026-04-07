@@ -18,7 +18,10 @@ test("exports a GIF from a loaded video", async () => {
 			MAIN_JS,
 			// Required in CI sandbox environments (GitHub Actions, Docker, etc.)
 			"--no-sandbox",
-			// Force software WebGL in headless CI to avoid GPU framebuffer errors.
+			// Prevent the GPU process from spawning — it crashes in headless CI,
+			// stalls WebGL exports, and causes app.close() to hang on teardown.
+			"--disable-gpu",
+			// Force software WebGL fallback once GPU is disabled.
 			"--enable-unsafe-swiftshader",
 		],
 		env: {
@@ -126,7 +129,10 @@ test("exports a GIF from a loaded video", async () => {
 		const stats = fs.statSync(outputPath);
 		expect(stats.size).toBeGreaterThan(1024); // at least 1 KB
 	} finally {
-		await app.close();
+		await Promise.race([
+			app.close(),
+			new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+		]).finally(() => app.process().kill());
 		if (fs.existsSync(outputPath)) {
 			fs.unlinkSync(outputPath);
 		}
