@@ -107,7 +107,8 @@ export class VideoExporter {
 		let webcamDecodeError: Error | null = null;
 		let webcamDecodePromise: Promise<void> | null = null;
 		let webcamDecoder: StreamingVideoDecoder | null = null;
-
+		const warnings: string[] = [];
+		const _onWarning = (message: string) => warnings.push(message);
 		this.cleanup();
 		this.cancelled = false;
 		this.fatalEncoderError = null;
